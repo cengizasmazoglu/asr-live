@@ -1,0 +1,11 @@
+# Training stack
+torch
+transformers>=4.40
+datasets
+accelerate
+peft
+evaluate
+jiwer
+soundfile
+librosa
+wandb

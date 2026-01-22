@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+
+# Large data / outputs (DO NOT COMMIT)
+work/
+data/
+segments/
+wav16k/
+*.wav
+*.mp3
+*.flac
+
+# Training artifacts / checkpoints
+ckpt/
+checkpoints/
+*.pt
+*.bin
+*.ckpt
+*.safetensors
+
+# Logs
+logs/
+*.log
+
+# W&B local files (we'll add W&B later)
+wandb/
+
+# OS/editor
+.DS_Store
+.vscode/

@@ -1,0 +1,25 @@
+FROM pytorch/pytorch:2.4.1-cuda12.1-cudnn9-runtime
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git ffmpeg libsndfile1 \
+ && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Python deps
+COPY requirements-train.txt /app/requirements-train.txt
+RUN pip install --no-cache-dir -r /app/requirements-train.txt
+
+# Copy code only (NOT data)
+COPY train /app/train
+COPY scripts /app/scripts
+
+# Recommended caches on Network Volume
+ENV HF_HOME=/workspace/hf_cache
+ENV TRANSFORMERS_CACHE=/workspace/hf_cache
+ENV HF_DATASETS_CACHE=/workspace/hf_cache/datasets
+ENV WANDB_DIR=/workspace/wandb
+
+# Default command (override in RunPod)
+CMD ["python", "train/train_whisper_lora.py", "--help"]
