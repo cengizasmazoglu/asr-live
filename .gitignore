@@ -30,3 +30,13 @@ wandb/
 # OS/editor
 .DS_Store
 .vscode/
+
+
+*.tar.gz
+work/processed/
+work/segments/
+work/wandb/
+out/
+outputs/
+# artifacts
+*.tar.gz
