@@ -7,7 +7,7 @@ import os, subprocess
 import wandb
 
 import torch
-from datasets import load_dataset, Audio
+from datasets import load_dataset, Features, Value
 from transformers import (
     WhisperProcessor,
     WhisperForConditionalGeneration,
@@ -59,10 +59,12 @@ def main():
     ap.add_argument("--lr", type=float, default=1e-4)
     ap.add_argument("--batch", type=int, default=8)
     ap.add_argument("--grad_accum", type=int, default=2)
+    ap.add_argument("--max_steps", type=int, default=0,
+                help="If >0, stop training after this many optimizer steps (after grad_accum).")
     ap.add_argument("--warmup_steps", type=int, default=200)
     ap.add_argument("--eval_steps", type=int, default=500)
     ap.add_argument("--save_steps", type=int, default=500)
-    ap.add_argument("--fp16", action="store_true", default=True)
+    ap.add_argument("--fp16", action="store_true", help="Enable fp16")
     ap.add_argument("--num_workers", type=int, default=2)
 
     ap.add_argument("--wandb", action="store_true", help="Enable Weights & Biases logging")
@@ -149,20 +151,42 @@ def main():
     )
     model = get_peft_model(model, lora)
 
+    features = Features({"audio": Value("string"), "text": Value("string")})
     ds = load_dataset(
         "json",
-        data_files={"train": str(train_path), "validation": str(val_path)},
+        data_files={"train": args.train_jsonl, "validation": args.val_jsonl},
+        features=features,
     )
-    ds = ds.cast_column("audio", Audio(sampling_rate=16000))
+
 
     def prepare(batch):
-        audio = batch["audio"]
-        inputs = processor(
-            audio["array"], sampling_rate=audio["sampling_rate"], return_tensors="pt"
-        )
+        audio_path = batch["audio"]
+
+        # Load WAV from path without datasets Audio decoding
+        try:
+            import soundfile as sf
+            wav, sr = sf.read(audio_path)
+        except Exception:
+            import torchaudio
+            wav, sr = torchaudio.load(audio_path)
+            wav = wav.squeeze(0).cpu().numpy()
+            sr = int(sr)
+
+        # ensure mono + float32
+        import numpy as np
+        wav = np.asarray(wav, dtype=np.float32)
+        if wav.ndim > 1:
+            # (T, C) or (C, T) edge-cases; average channels
+            if wav.shape[0] < wav.shape[-1]:
+                wav = wav.mean(axis=0)
+            else:
+                wav = wav.mean(axis=1)
+
+        inputs = processor(wav, sampling_rate=sr, return_tensors="pt")
         batch["input_features"] = inputs.input_features[0]
         batch["labels"] = processor.tokenizer(batch["text"]).input_ids
         return batch
+
 
     ds = ds.map(
         prepare,
@@ -182,6 +206,7 @@ def main():
         num_train_epochs=args.epochs,
         fp16=args.fp16,
         logging_steps=50,
+        max_steps=(args.max_steps if args.max_steps > 0 else -1),
         evaluation_strategy="steps",
         eval_steps=args.eval_steps,
         save_steps=args.save_steps,
